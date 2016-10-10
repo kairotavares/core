@@ -1,6 +1,6 @@
 #
 # CORE
-# Copyright (c)2010-2016 the Boeing Company.
+# Copyright (c)2010-2012 the Boeing Company.
 # See the LICENSE file included in this distribution.
 #
 # authors: Tom Goff <thomas.goff@boeing.com>
@@ -110,17 +110,6 @@ class EbtablesQueue(object):
         while self.doupdateloop:
             self.updatelock.acquire()
             for wlan in self.updates:
-                ''' 
-                Check if wlan is from a previously closed session. Because of the 
-                rate limiting scheme employed here, this may happen if a new session 
-                is started soon after closing a previous session.
-                '''
-                try:
-                    wlan.session
-                except:
-                    # Just mark as updated to remove from self.updates. 
-                    self.updated(wlan)
-                    continue
                 if self.lastupdate(wlan) > self.rate:
                     self.buildcmds(wlan)
                     #print "ebtables commit %d rules" % len(self.cmds)
@@ -225,20 +214,29 @@ class LxBrNet(PyCoreNet):
         sessionid = self.session.shortsessionid()
         self.brname = "b.%s.%s" % (str(self.objid), sessionid)
         self.up = False
+        self.bridgeType = session.getcfgitem('bridgetype')
+
         if start:
             self.startup()
             ebq.startupdateloop(self)
 
     def startup(self):
         try:
-            check_call([BRCTL_BIN, "addbr", self.brname])
+            if self.bridgeType == "ovs":
+                check_call([OVS_BIN, "add-br", self.brname])
+            else:
+                check_call([BRCTL_BIN, "addbr", self.brname])
         except Exception, e:
             self.exception(coreapi.CORE_EXCP_LEVEL_FATAL, self.brname,
                            "Error adding bridge: %s" % e)
         try:
             # turn off spanning tree protocol and forwarding delay
-            check_call([BRCTL_BIN, "stp", self.brname, "off"])
-            check_call([BRCTL_BIN, "setfd", self.brname, "0"])
+            if self.bridgeType == "ovs":
+                check_call([OVS_BIN, "set", "Bridge", self.brname, "stp_enable=false"])
+                check_call([OVS_BIN, "set-fail-mode", self.brname, "standalone"])
+            else:
+                check_call([BRCTL_BIN, "stp", self.brname, "off"])
+                check_call([BRCTL_BIN, "setfd", self.brname, "0"])
             check_call([IP_BIN, "link", "set", self.brname, "up"])
             # create a new ebtables chain for this bridge
             ebtablescmds(check_call, [
@@ -261,7 +259,11 @@ class LxBrNet(PyCoreNet):
             return
         ebq.stopupdateloop(self)
         mutecall([IP_BIN, "link", "set", self.brname, "down"])
-        mutecall([BRCTL_BIN, "delbr", self.brname])
+        if self.bridgeType == "ovs":
+            mutecall([OVS_BIN, "del-br", self.brname])
+        else:
+            mutecall([BRCTL_BIN, "delbr", self.brname])
+
         ebtablescmds(mutecall, [
             [EBTABLES_BIN, "-D", "FORWARD",
              "--logical-in", self.brname, "-j", self.brname],
@@ -277,7 +279,10 @@ class LxBrNet(PyCoreNet):
     def attach(self, netif):
         if self.up:
             try:
-                check_call([BRCTL_BIN, "addif", self.brname, netif.localname])
+                if self.bridgeType == "ovs":
+                    check_call([OVS_BIN, "add-port", self.brname, netif.localname])
+                else:
+                    check_call([BRCTL_BIN, "addif", self.brname, netif.localname])
                 check_call([IP_BIN, "link", "set", netif.localname, "up"])
             except Exception, e:
                 self.exception(coreapi.CORE_EXCP_LEVEL_ERROR, self.brname,
@@ -289,7 +294,10 @@ class LxBrNet(PyCoreNet):
     def detach(self, netif):
         if self.up:
             try:
-                check_call([BRCTL_BIN, "delif", self.brname, netif.localname])
+                if self.bridgeType == "ovs":
+                    check_call([OVS_BIN, "del-port", self.brname, netif.localname])
+                else:
+                    check_call([BRCTL_BIN, "delif", self.brname, netif.localname])
             except Exception, e:
                 self.exception(coreapi.CORE_EXCP_LEVEL_ERROR, self.brname,
                                "Error removing interface %s from bridge %s: %s" % \
@@ -445,7 +453,10 @@ class LxBrNet(PyCoreNet):
         if net.up:
             # this is similar to net.attach() but uses netif.name instead 
             # of localname
-            check_call([BRCTL_BIN, "addif", net.brname, netif.name])
+            if self.bridgeType == "ovs":
+                check_call([OVS_BIN, "add-port", net.brname, netif.name])
+            else:
+                check_call([BRCTL_BIN, "addif", net.brname, netif.name])
             check_call([IP_BIN, "link", "set", netif.name, "up"])
         i = net.newifindex()
         net._netif[i] = netif

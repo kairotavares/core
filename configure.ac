@@ -133,6 +133,7 @@ SEARCHPATH="/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/sbin:/usr/local/bin"
 #
 if test "x$enable_daemon" = "xyes" ; then
   AC_CHECK_PROG(brctl_path, brctl, $as_dir, no, $SEARCHPATH)
+  AC_CHECK_PROG(ovs_path, ovs-vsctl, $as_dir, no, $SEARCHPATH)
   AC_CHECK_PROG(sysctl_path, sysctl, $as_dir, no, $SEARCHPATH)
   AC_CHECK_PROG(ebtables_path, ebtables, $as_dir, no, $SEARCHPATH)
   AC_CHECK_PROG(ip_path, ip, $as_dir, no, $SEARCHPATH)
@@ -254,6 +255,11 @@ if test "x$want_linux_netns" = "xyes"; then
 	progs_missing="${progs_missing}brctl "
 	brctl_path="/usr/sbin"
 	AC_MSG_ERROR([Could not locate brctl (from bridge-utils package).])
+    fi
+    if test "x$ovs_path" = "xno" ; then
+        progs_missing="${progs_missing}ovs-vsctl "
+        ovs_path="/usr/bin/ovs-vsctl"
+        AC_MSG_ERROR([Could not locate ovs-vsctl (from openvswitch package).])
     fi
     if test "x$ebtables_path" = "xno" ; then
 	progs_missing="${progs_missing}ebtables "

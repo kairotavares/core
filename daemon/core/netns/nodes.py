@@ -34,6 +34,7 @@ class CtrlNet(LxBrNet):
         self.assign_address = assign_address
         self.updown_script = updown_script
         self.serverintf = serverintf
+        self.bridgeType = session.getcfgitem('bridgetype')
         LxBrNet.__init__(self, session, objid = objid, name = name,
                          verbose = verbose, start = start)
 
@@ -59,7 +60,10 @@ class CtrlNet(LxBrNet):
             check_call([self.updown_script, self.brname, "startup"])
         if self.serverintf is not None:
             try:
-                check_call([BRCTL_BIN, "addif", self.brname, self.serverintf])
+                if self.bridgeType == "ovs":
+                    check_call([OVS_BIN, "add-port", self.brname, self.serverintf])
+                else:
+                    check_call([BRCTL_BIN, "addif", self.brname, self.serverintf])
                 check_call([IP_BIN, "link", "set", self.serverintf, "up"])
             except Exception, e:
                 self.exception(coreapi.CORE_EXCP_LEVEL_FATAL, self.brname,
@@ -71,7 +75,8 @@ class CtrlNet(LxBrNet):
         ''' Occassionally, control net bridges from previously closed sessions are not cleaned up.
         Check if there are old control net bridges and delete them
         ''' 
-        retstat, retstr = cmdresult([BRCTL_BIN,'show'])
+        #retstat, retstr = cmdresult([BRCTL_BIN,'show'])
+        retstat, retstr = cmdresult([OVS_BIN,'show'])
         if retstat != 0:
             self.exception(coreapi.CORE_EXCP_LEVEL_FATAL, None,
                            "Unable to retrieve list of installed bridges")
@@ -103,7 +108,10 @@ class CtrlNet(LxBrNet):
     def shutdown(self):
         if self.serverintf is not None:
             try:
-                check_call([BRCTL_BIN, "delif", self.brname, self.serverintf])
+                if self.bridgeType == "ovs":
+                    check_call([OVS_BIN, "del-port", self.brname, self.serverintf])
+                else:
+                    check_call([BRCTL_BIN, "delif", self.brname, self.serverintf])
             except Exception, e:
                 self.exception(coreapi.CORE_EXCP_LEVEL_ERROR, self.brname,
                                "Error deleting server interface %s to controlnet bridge %s: %s" % \
@@ -237,8 +245,10 @@ class HubNode(LxBrNet):
             the MAC address learning
         '''
         LxBrNet.__init__(self, session, objid, name, verbose, start)
+        # TODO OVS as a HUB
         if start:
-            check_call([BRCTL_BIN, "setageing", self.brname, "0"])
+            if self.bridgeType == "ovs":
+                check_call([BRCTL_BIN, "setageing", self.brname, "0"])
 
 
 class WlanNode(LxBrNet):

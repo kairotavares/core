@@ -7,6 +7,7 @@ CORE_LIB_DIR		= "@CORE_LIB_DIR@"
 CORE_SBIN_DIR		= "@SBINDIR@"
 
 BRCTL_BIN               = "@brctl_path@/brctl"
+OVS_BIN                 = "@ovs_path@/ovs-vsctl"
 SYSCTL_BIN              = "@sysctl_path@/sysctl"
 IP_BIN                  = "@ip_path@/ip"
 TC_BIN                  = "@tc_path@/tc"
